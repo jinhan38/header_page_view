@@ -66,9 +66,11 @@ class _HomeScreenState extends State<HomeScreen> {
               color: Colors.purple,
             ),
           ],
-          tabHeight: 50,
+          // tabHeight: 50,
           tabWidget:
-              List.generate(4, (index) => Center(child: Text("$index 아이템"))),
+              List.generate(4, (index) => Center(child: SizedBox(
+                  height: 50,
+                  child: Center(child: Text("$index 아이템"))))),
           indicatorWidget: Container(color: Colors.red.shade300),
           pageViewLists: [
             _pageViewItem(),
@@ -76,7 +78,7 @@ class _HomeScreenState extends State<HomeScreen> {
             _pageViewItem(),
             _pageViewItem(),
           ],
-          headerHeight: 600,
+          // headerHeight: 600,
         ),
       ),
     );
