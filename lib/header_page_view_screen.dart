@@ -1,11 +1,12 @@
 import 'dart:ui';
+import 'dart:core';
 
 import 'package:flutter/material.dart';
-import 'package:flutter/rendering.dart';
-import 'package:header_page_view/MeasureUtil.dart';
 import 'package:header_page_view/page_view_item.dart';
 
-class HeaderPageViewScreen extends StatefulWidget {
+import 'MeasureUtil.dart';
+
+class HeaderPageView extends StatefulWidget {
   List<Widget>? header;
   double? tabWidth;
   EdgeInsetsGeometry? tabMargin;
@@ -19,8 +20,10 @@ class HeaderPageViewScreen extends StatefulWidget {
   PageController pageController;
   bool headerAnimation;
   double headerAnimationRatio;
+  bool useTabBar;
+  TabBar? tabBar;
 
-  HeaderPageViewScreen({
+  HeaderPageView({
     required this.tabWidget,
     required this.indicatorWidget,
     required this.pageViewLists,
@@ -33,9 +36,14 @@ class HeaderPageViewScreen extends StatefulWidget {
     this.pagingDuration = const Duration(milliseconds: 200),
     this.headerAnimation = true,
     this.pageViewItemKeepAlive = true,
-    this.headerAnimationRatio = 0.7,
+    this.headerAnimationRatio = 0.9,
+    this.useTabBar = true,
+    this.tabBar,
     Key? key,
-  })  : assert(
+  })  :
+        // assert(!useTabBar && tabWidget.length > 0,
+        //     "Length of tabWidget must be more than 0"),
+        assert(
           tabWidget.length == pageViewLists.length,
           'Length of tabWidget and Length of tabWidget must be the same.'
           ' tabWidget.length is ${tabWidget.length}.'
@@ -48,10 +56,10 @@ class HeaderPageViewScreen extends StatefulWidget {
         super(key: key) {}
 
   @override
-  _HeaderPageViewScreenState createState() => _HeaderPageViewScreenState();
+  _HeaderPageViewState createState() => _HeaderPageViewState();
 }
 
-class _HeaderPageViewScreenState extends State<HeaderPageViewScreen>
+class _HeaderPageViewState extends State<HeaderPageView>
     with SingleTickerProviderStateMixin {
   late AnimationController _animationController;
   final Animatable<double> _animationCurve = Tween<double>(begin: 0, end: 1);
@@ -64,17 +72,25 @@ class _HeaderPageViewScreenState extends State<HeaderPageViewScreen>
   double _tabTop = 0;
   double _beforeScrollOffset = 0;
   double _tabHeight = 0;
-
+  double selectedTabWidth = 0;
+  Size? _size;
+  double _tabDragPosition = 0;
 
   @override
   void initState() {
     _setScrollController();
     _pageController = widget.pageController;
     _pageController.addListener(_setPageControllerMove);
-    _animationController =
-        AnimationController(vsync: this, duration: widget.pagingDuration);
+    if (widget.useTabBar) {
+      _tabController =
+          TabController(length: widget.pageViewLists.length, vsync: this);
+    } else {
+      _animationController =
+          AnimationController(vsync: this, duration: widget.pagingDuration);
+    }
     super.initState();
   }
+
   _setScrollController() {
     _sControllers = List.generate(
         widget.pageViewLists.length, (index) => ScrollController());
@@ -92,25 +108,31 @@ class _HeaderPageViewScreenState extends State<HeaderPageViewScreen>
       } else {
         if (offset <= _headerHeight) {
           if (offset <= -_headerTop) {
-            setState(() {
-              _headerTop = -offset;
-              _checkHeaderTopMax();
-              _setTabTop();
-            });
+            if (mounted) {
+              setState(() {
+                _headerTop = -offset;
+                _checkHeaderTopMax();
+                _setTabTop();
+              });
+            }
           } else if (_headerTop > -_headerHeight) {
+            if (mounted) {
+              setState(() {
+                _headerTop = -offset;
+                _checkHeaderTopMax();
+                _setTabTop();
+              });
+            }
+          }
+        } else if (offset > _headerHeight && _headerTop > -_headerHeight) {
+          double value = offset - _beforeScrollOffset;
+          if (mounted) {
             setState(() {
-              _headerTop = -offset;
+              _headerTop -= value;
               _checkHeaderTopMax();
               _setTabTop();
             });
           }
-        } else if (offset > _headerHeight && _headerTop > -_headerHeight) {
-          double value = offset - _beforeScrollOffset;
-          setState(() {
-            _headerTop -= value;
-            _checkHeaderTopMax();
-            _setTabTop();
-          });
         }
       }
       if (_sControllers[_currentIndex].hasClients) {
@@ -138,29 +160,45 @@ class _HeaderPageViewScreenState extends State<HeaderPageViewScreen>
       if (i != _currentIndex &&
           _sControllers[i].hasClients &&
           _sControllers[i].offset < _headerHeight) {
-        _sControllers[i].jumpTo(-_headerTop);
-        setState(() {
-          _setTabTop();
-        });
+        if (mounted) {
+          _sControllers[i].jumpTo(-_headerTop);
+          setState(() {
+            _setTabTop();
+          });
+        }
       }
     }
-    if (!_animationController.isAnimating) {
-      _animationController.animateTo(
-          _calcAnimationValue(_pageController.page!.round()),
-          duration: widget.pagingDuration);
-      _setCurrentPage(_pageController.page!.round());
+    if (widget.useTabBar) {
+      if (!_tabController.indexIsChanging) {
+        _tabController.animateTo(
+            _calcAnimationValue(_pageController.page!.round()).round(),
+            duration: widget.pagingDuration);
+        _setCurrentPage(_pageController.page!.round());
+      }
+    } else {
+      if (!_animationController.isAnimating) {
+        _animationController.animateTo(
+            _calcAnimationValue(_pageController.page!.round()),
+            duration: widget.pagingDuration);
+        _setCurrentPage(_pageController.page!.round());
+      }
     }
   }
-
 
   _setTabTop() {
     double tempTabTop = _headerTop + _headerHeight;
     _tabTop = tempTabTop < 0 ? 0 : tempTabTop;
   }
+
   _playAnimation(int toIndex) {
     _movePageView(toIndex);
-    _animationController.animateTo(_calcAnimationValue(toIndex),
-        duration: widget.pagingDuration);
+    if (widget.useTabBar) {
+      _tabController.animateTo(_calcAnimationValue(toIndex).round(),
+          duration: widget.pagingDuration);
+    } else {
+      _animationController.animateTo(_calcAnimationValue(toIndex),
+          duration: widget.pagingDuration);
+    }
     _setCurrentPage(toIndex);
   }
 
@@ -169,13 +207,12 @@ class _HeaderPageViewScreenState extends State<HeaderPageViewScreen>
       canPaging = false;
       _pageController
           .animateToPage(toIndex,
-          duration: widget.pagingDuration, curve: Curves.linear)
+              duration: widget.pagingDuration, curve: Curves.linear)
           .then((value) {
         canPaging = true;
       });
     }
   }
-
 
   _setCurrentPage(int toIndex) {
     _currentIndex = toIndex;
@@ -189,13 +226,22 @@ class _HeaderPageViewScreenState extends State<HeaderPageViewScreen>
 
   @override
   void dispose() {
-    _animationController.dispose();
+    if (widget.useTabBar) {
+      _tabController.dispose();
+    } else {
+      _animationController.dispose();
+    }
+
     super.dispose();
   }
 
   @override
   Widget build(BuildContext context) {
-    return _body();
+    return MeasureSize(
+        onChange: (size) {
+          _size ??= size;
+        },
+        child: _body());
   }
 
   Widget _body() {
@@ -207,9 +253,44 @@ class _HeaderPageViewScreenState extends State<HeaderPageViewScreen>
           left: 0,
           right: 0,
           top: _tabTop,
-          child: _tab(),
+          child: Visibility(
+            visible: widget.header != null &&
+                    widget.header!.isNotEmpty &&
+                    _headerHeight == 0
+                ? false
+                : true,
+            child: widget.useTabBar
+                ? _tabBar()
+                : _customTab(),
+          ),
         ),
       ],
+    );
+  }
+
+  TabBar _tabBar(){
+    return  TabBar(
+      controller: _tabController,
+      tabs: List.generate(
+        4,
+            (index) => Tab(
+          child: Text("iii : $index"),
+        ),
+      ),
+      onTap: (index) {
+        _playAnimation(index);
+        if (!_sControllers[index].hasClients) {
+          if (mounted) {
+            setState(() {
+              _sControllers[index] = ScrollController(
+                  initialScrollOffset: -_headerTop);
+              _initScrollControllerListener(index);
+            });
+          }
+        }
+      },
+      unselectedLabelColor: Colors.grey,
+      labelColor: Colors.black,
     );
   }
 
@@ -230,6 +311,23 @@ class _HeaderPageViewScreenState extends State<HeaderPageViewScreen>
     );
   }
 
+  Widget _animationHeader() {
+    return Opacity(
+      opacity:
+          _headerHeight == 0 ? 1 : (1 - (-_headerTop / _headerHeight) * 0.5),
+      child: Column(
+        children: [
+          if (_headerHeight == 0) ...[
+            ...widget.header!,
+          ] else ...[
+            ...List.generate(
+                widget.header!.length, (index) => widget.header![index]),
+          ],
+        ],
+      ),
+    );
+  }
+
   Widget _header() {
     if (widget.header == null || widget.header!.isEmpty) {
       return const SizedBox();
@@ -240,27 +338,10 @@ class _HeaderPageViewScreenState extends State<HeaderPageViewScreen>
         left: 0,
         right: 0,
         child: _measureHeaderHeight(
-          child: SizedBox(
-            height: _headerHeight == 0
-                ? null
-                : _headerHeight +
-                    _headerTop * (1 - widget.headerAnimationRatio),
-            width: MediaQuery.of(context).size.width,
-            child: Opacity(
-              opacity: _headerHeight == 0
-                  ? 1
-                  : (1 - (-_headerTop / _headerHeight) * 0.5),
-              child: Column(
-                children: [
-                  if (_headerHeight == 0) ...[
-                    ...widget.header!,
-                  ] else ...[
-                    ...List.generate(widget.header!.length,
-                        (index) => Expanded(child: widget.header![index])),
-                  ],
-                ],
-              ),
-            ),
+          child: Column(
+            children: [
+              FittedBox(child: _animationHeader()),
+            ],
           ),
         ),
       );
@@ -272,14 +353,12 @@ class _HeaderPageViewScreenState extends State<HeaderPageViewScreen>
         child: _measureHeaderHeight(
           child: Container(
             height: _headerHeight == 0 ? null : _headerHeight,
-            color: Colors.blue,
             child: Column(children: widget.header!),
           ),
         ),
       );
     }
   }
-
 
   Widget _measureTabHeight({required Widget child}) {
     if (_tabHeight != 0) {
@@ -297,70 +376,113 @@ class _HeaderPageViewScreenState extends State<HeaderPageViewScreen>
     );
   }
 
-  Widget _tab() {
-    double selectedTabWidth = 0;
-    if (widget.tabWidth == null) {
-      selectedTabWidth =
-          MediaQuery.of(context).size.width / widget.tabWidget.length;
-    } else {
-      selectedTabWidth = widget.tabWidth! / widget.tabWidget.length;
-    }
-    return _measureTabHeight(
-      child: Container(
-        height:_tabHeight == 0 ? null :_tabHeight,
-        width: widget.tabWidth ?? double.infinity,
-        margin: widget.tabMargin,
-        padding: widget.tabPadding,
-        decoration: widget.tabDecoration,
-        child: Stack(
-          children: [
-            AnimatedBuilder(
-              animation: _animationController,
-              child: SizedBox(
-                  width: selectedTabWidth,
-                  height:_tabHeight == 0 ? null :_tabHeight,
-                  child: widget.indicatorWidget),
-              builder: (context, child) {
-                return Align(
-                  alignment: Alignment(
-                      lerpDouble(
-                          -1, 1, _animationCurve.evaluate(_animationController))!,
-                      0),
-                  child: child,
-                );
-              },
-            ),
-            SizedBox(
-              height:_tabHeight == 0 ? null :_tabHeight,
-              child: Row(
-                children: _unSelectedTabWidget((index) {
-                  setState(() => _headerTop = -_headerHeight);
-                  _playAnimation(index);
-                  if (!_sControllers[index].hasClients) {
-                    setState(() {
-                      _sControllers[index] =
-                          ScrollController(initialScrollOffset: -_headerTop);
-                      _initScrollControllerListener(index);
-                    });
-                  }
-                }),
+  late TabController _tabController;
+
+  Widget _customTab() {
+    _calcSelectedTabWidth();
+    return Container(
+      color: Colors.white,
+      child: _measureTabHeight(
+        child: Container(
+          height: _tabHeight == 0 ? null : _tabHeight,
+          width: widget.tabWidth ?? double.infinity,
+          margin: widget.tabMargin,
+          padding: widget.tabPadding,
+          decoration: widget.tabDecoration,
+          child: Stack(
+            children: [
+              AnimatedBuilder(
+                animation: _animationController,
+                // child: SizedBox(width: selectedTabWidth, height: _tabHeight == 0 ? null : _tabHeight, child: widget.indicatorWidget),
+                child: Container(
+                    constraints: BoxConstraints(maxHeight: _tabHeight),
+                    width: selectedTabWidth,
+                    child: widget.indicatorWidget),
+                builder: (context, child) {
+                  return Align(
+                    alignment: Alignment(
+                        lerpDouble(-1, 1,
+                            _animationCurve.evaluate(_animationController))!,
+                        0),
+                    child: child,
+                  );
+                },
               ),
-            )
-          ],
+              SizedBox(
+                height: _tabHeight == 0 ? null : _tabHeight,
+                child: Row(
+                  children: _unSelectedTabWidget((index) {
+                    if (mounted) {
+                      setState(() => _headerTop = -_headerHeight);
+                    }
+                    _playAnimation(index);
+                    if (!_sControllers[index].hasClients) {
+                      if (mounted) {
+                        setState(() {
+                          _sControllers[index] = ScrollController(
+                              initialScrollOffset: -_headerTop);
+                          _initScrollControllerListener(index);
+                        });
+                      }
+                    }
+                  }),
+                ),
+              )
+            ],
+          ),
         ),
       ),
     );
   }
 
-  List<Widget> _unSelectedTabWidget( Function(int) onTap) {
+  _calcSelectedTabWidth() {
+    double marginWidth = 0;
+    double paddingWidth = 0;
+    if (selectedTabWidth == 0) {
+      if (widget.tabMargin != null) {
+        marginWidth = widget.tabMargin!.horizontal;
+      }
+      if (widget.tabPadding != null) {
+        paddingWidth = widget.tabPadding!.horizontal;
+      }
+      if (widget.tabWidth == null) {
+        selectedTabWidth =
+            (MediaQuery.of(context).size.width - marginWidth - paddingWidth) /
+                widget.tabWidget.length;
+      } else {
+        selectedTabWidth = (widget.tabWidth! - marginWidth - paddingWidth) /
+            widget.tabWidget.length;
+      }
+    }
+  }
+
+  List<Widget> _unSelectedTabWidget(Function(int) onTap) {
     return List.generate(
       widget.tabWidget.length,
       (index) => Expanded(
         child: GestureDetector(
+          onVerticalDragDown: (details) {
+            _tabDragPosition = details.globalPosition.dy;
+          },
+          onVerticalDragUpdate: (details) {
+            /// headerTop 값이 0일 때
+            /// 아래에서 위로 드래그 한 경우 details.globalPosition.dy 값은 더 작아진다.
+            /// 위에서 아래로 그래그한 경우  details.globalPosition.dy 값은 더 커진다.
+            /// _headerTop 값이 0이고, 위에서 아래로 그래그 한 경우 아무 효과 없다.
+            if (_tabDragPosition != details.globalPosition.dy &&
+                !(_tabDragPosition < details.globalPosition.dy &&
+                    _headerTop.abs() == 0)) {
+              _sControllers[_currentIndex].jumpTo(
+                  _sControllers[_currentIndex].offset +
+                      (_tabDragPosition - details.globalPosition.dy));
+            }
+            _tabDragPosition = details.globalPosition.dy;
+          },
+          onVerticalDragEnd: (details) => _tabDragPosition = 0,
+          onVerticalDragCancel: () => _tabDragPosition = 0,
           behavior: HitTestBehavior.translucent,
           onTap: () => onTap(index),
-          child:
-              SizedBox(child: widget.tabWidget[index]),
+          child: Container(child: widget.tabWidget[index]),
         ),
       ),
     );
@@ -377,11 +499,23 @@ class _HeaderPageViewScreenState extends State<HeaderPageViewScreen>
   }
 
   Widget _pageViewItem(Widget child, ScrollController scrollController) {
-    return PageViewItem(
+    double topPadding = 0;
+    if (widget.header != null && widget.header!.isNotEmpty) {
+      if (_headerHeight == 0) {
+        topPadding = MediaQuery.of(context).size.height;
+      } else {
+        topPadding = _headerHeight;
+      }
+    }
+    return HeaderPageViewItem(
       widget: child,
       pageViewItemKeepAlive: widget.pageViewItemKeepAlive,
       scrollController: scrollController,
-      topPadding: _headerHeight + _tabHeight,
+      topPadding: topPadding,
+      topMarin: _tabHeight,
+      minHeight: _size == null
+          ? MediaQuery.of(context).size.height
+          : _size!.height - _tabHeight,
     );
   }
 }

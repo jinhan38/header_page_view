@@ -11,11 +11,9 @@ class MyApp extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     return MaterialApp(
-      title: 'Flutter Demo',
-      theme: ThemeData(
-        primarySwatch: Colors.blue,
-      ),
-      home: HomeScreen(),
+      title: 'Header PageView',
+      theme: ThemeData(primarySwatch: Colors.blue),
+      home: const HomeScreen(),
     );
   }
 }
@@ -32,46 +30,21 @@ class _HomeScreenState extends State<HomeScreen> {
   Widget build(BuildContext context) {
     return Scaffold(
       body: SafeArea(
-        child: HeaderPageViewScreen(
+        child: HeaderPageView(
+          useTabBar: false,
           pageController: PageController(),
-          header: [
-            Container(
-              height: 100,
-              width: double.infinity,
-              color: Colors.blue,
-            ),
-            Container(
-              height: 100,
-              width: double.infinity,
-              color: Colors.green,
-            ),
-            Container(
-              height: 100,
-              width: double.infinity,
-              color: Colors.purple,
-            ),
-            Container(
-              height: 100,
-              width: double.infinity,
-              color: Colors.blue,
-            ),
-            Container(
-              height: 100,
-              width: double.infinity,
-              color: Colors.green,
-            ),
-            Container(
-              height: 100,
-              width: double.infinity,
-              color: Colors.purple,
-            ),
-          ],
-          // tabHeight: 50,
-          tabWidget:
-              List.generate(4, (index) => Center(child: SizedBox(
-                  height: 50,
-                  child: Center(child: Text("$index 아이템"))))),
-          indicatorWidget: Container(color: Colors.red.shade300),
+          // header: _header(),
+          tabWidget: List.generate(
+              4,
+              (index) => Center(
+                  child: SizedBox(
+                      height: 70, child: Center(child: Text(_test(index)))))),
+          indicatorWidget: Column(
+            mainAxisAlignment: MainAxisAlignment.end,
+            children: [
+              Container(height: 5, color: Colors.red.shade300),
+            ],
+          ),
           pageViewLists: [
             _pageViewItem(),
             _pageViewItem(),
@@ -84,10 +57,34 @@ class _HomeScreenState extends State<HomeScreen> {
     );
   }
 
+  String _test(int index) {
+    if (index == 0) {
+      return "aaaa";
+    } else if (index == 1) {
+      return "kfkfkfkfkfkfk";
+    }
+    return index.toString();
+  }
+
+  List<Widget> _header() {
+    return [
+      Container(
+        height: 100,
+        color: Colors.blue,
+      ),
+      Container(
+        height: 100,
+        color: Colors.green,
+      ),
+      Container(
+        height: 100,
+        color: Colors.purple,
+      ),
+    ];
+  }
+
   Widget _pageViewItem() {
-    return ListView(
-      physics: NeverScrollableScrollPhysics(),
-      shrinkWrap: true,
+    return Column(
       children: List.generate(
         30,
         (index) => SizedBox(
